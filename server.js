@@ -4,6 +4,7 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const axios = require('axios');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -13,7 +14,7 @@ app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 
-// Static files
+// Serve static files
 app.use(express.static('public'));
 
 // Store data (in production, use a database)
@@ -21,35 +22,37 @@ const orders = new Map();
 const products = new Map();
 const webhookLogs = [];
 
-// Initialize sample products
+// Initialize demo products for MBOOSTT
 function initializeProducts() {
-  products.set('prod_001', {
-    id: 'prod_001',
-    name: 'Premium Headphones',
-    price: 50000,
-    description: 'High-quality wireless headphones',
-    image: 'https://via.placeholder.com/300x300?text=Headphones'
-  });
-  products.set('prod_002', {
-    id: 'prod_002',
-    name: 'USB-C Cable',
-    price: 15000,
-    description: 'Durable USB-C charging cable',
-    image: 'https://via.placeholder.com/300x300?text=USB-C+Cable'
-  });
-  products.set('prod_003', {
-    id: 'prod_003',
-    name: 'Phone Case',
-    price: 25000,
-    description: 'Protective phone case with premium materials',
-    image: 'https://via.placeholder.com/300x300?text=Phone+Case'
-  });
-  products.set('prod_004', {
-    id: 'prod_004',
-    name: 'Screen Protector',
-    price: 10000,
-    description: 'Tempered glass screen protector',
-    image: 'https://via.placeholder.com/300x300?text=Screen+Protector'
+  const demoProducts = [
+    {
+      id: 'prod_001',
+      title: 'MANIFEST WEALTH',
+      price: '$49',
+      description: 'Digital masterpiece to unlock your potential',
+      link: 'https://mboostt.io/secure/ebook-manifest',
+      image: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240"%3E%3Crect width="240" height="240" fill="%232e140e"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" font-family="Georgia" font-size="20" fill="%23e6c39a"%3E📖 LUXE EBOOK%3C/text%3E%3C/svg%3E'
+    },
+    {
+      id: 'prod_002',
+      title: 'MINDSET AUDIO',
+      price: '$89',
+      description: 'Premium audio course for elite mindset',
+      link: 'https://mboostt.io/secure/audio-mindset',
+      image: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240"%3E%3Crect width="240" height="240" fill="%232b0f0f"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="18" fill="%23d9b48f"%3E🎧 AUDIO%3C/text%3E%3C/svg%3E'
+    },
+    {
+      id: 'prod_003',
+      title: 'ELITE TG BOT',
+      price: '$129',
+      description: 'Automated Telegram bot for success',
+      link: 'https://t.me/elite_mboostt_bot',
+      image: 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 240 240"%3E%3Crect width="240" height="240" fill="%23331212"/%3E%3Ctext x="50%25" y="50%25" dominant-baseline="middle" text-anchor="middle" font-family="Arial" font-size="22" fill="%23d9b48f"%3E🤖 BOT%3C/text%3E%3C/svg%3E'
+    }
+  ];
+
+  demoProducts.forEach(p => {
+    products.set(p.id, p);
   });
 }
 
@@ -59,12 +62,14 @@ initializeProducts();
 const wayl = {
   async createLink(orderData) {
     try {
+      console.log('Creating Wayl payment link:', orderData);
       const response = await axios.post(`${process.env.WAYL_API_URL}/api/v1/links`, orderData, {
         headers: {
           'Content-Type': 'application/json',
           'X-WAYL-AUTHENTICATION': process.env.WAYL_API_TOKEN
         }
       });
+      console.log('Wayl response:', response.data);
       return response.data;
     } catch (error) {
       console.error('Wayl API Error:', error.response?.data || error.message);
@@ -116,9 +121,9 @@ const wayl = {
 
 // Routes
 
-// Home
+// Home - Serve MBOOSTT.html
 app.get('/', (req, res) => {
-  res.sendFile(__dirname + '/public/index.html');
+  res.sendFile(path.join(__dirname, 'public', 'mboostt.html'));
 });
 
 // Get all products
@@ -138,37 +143,40 @@ app.get('/api/products/:id', (req, res) => {
   res.json({ success: true, data: product });
 });
 
-// Create payment link
-app.post('/api/checkout', async (req, res) => {
+// Create payment link for MBOOSTT product
+app.post('/api/checkout', express.json(), async (req, res) => {
   try {
-    const { items, customer } = req.body;
+    const { productId, customer } = req.body;
 
-    if (!items || items.length === 0) {
-      return res.status(400).json({ success: false, message: 'No items in cart' });
+    if (!productId) {
+      return res.status(400).json({ success: false, message: 'Product ID required' });
     }
 
-    // Calculate total
-    let total = 0;
-    const lineItems = items.map(item => {
-      const product = products.get(item.productId);
-      if (!product) throw new Error(`Product ${item.productId} not found`);
-      const amount = product.price * item.quantity;
-      total += amount;
-      return {
-        label: `${product.name} x${item.quantity}`,
-        amount: amount,
-        type: 'increase'
-      };
-    });
+    const product = products.get(productId);
+    if (!product) {
+      return res.status(404).json({ success: false, message: 'Product not found' });
+    }
 
-    const referenceId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Convert price string to number (e.g., "$49" -> 49000)
+    const priceMatch = product.price.match(/\d+/);
+    const priceInIQD = parseInt(priceMatch[0]) * 1000; // Convert to IQD
+
+    const referenceId = `mboostt_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    const lineItems = [
+      {
+        label: product.title,
+        amount: priceInIQD,
+        type: 'increase'
+      }
+    ];
 
     const waylPayload = {
-      env: process.env.WAYL_ENV || 'test',
+      env: process.env.WAYL_ENV || 'live',
       referenceId: referenceId,
-      total: total,
+      total: priceInIQD,
       currency: 'IQD',
-      customParameter: customer?.email || '',
+      customParameter: customer?.email || 'mboostt-customer',
       lineItem: lineItems,
       webhookUrl: process.env.WEBHOOK_URL || `${req.get('origin')}/webhooks/wayl`,
       webhookSecret: process.env.WEBHOOK_SECRET,
@@ -180,9 +188,10 @@ app.post('/api/checkout', async (req, res) => {
     // Store order
     orders.set(referenceId, {
       referenceId,
-      items,
+      productId,
+      product,
       customer,
-      total,
+      total: priceInIQD,
       status: 'Created',
       createdAt: new Date(),
       waylData: waylResponse.data
@@ -238,12 +247,16 @@ app.get('/api/orders/:referenceId', async (req, res) => {
   }
 });
 
-// Webhook endpoint
+// Webhook endpoint - Handle raw body
 app.post('/webhooks/wayl', express.raw({ type: 'application/json' }), (req, res) => {
   try {
     const signature = req.headers['x-wayl-signature-256'];
     const rawBody = req.body;
     const secret = process.env.WEBHOOK_SECRET;
+
+    console.log('Webhook received');
+    console.log('Signature:', signature);
+    console.log('Raw body type:', typeof rawBody);
 
     // Verify signature
     if (!wayl.verifyWebhookSignature(rawBody, signature, secret)) {
@@ -254,7 +267,7 @@ app.post('/webhooks/wayl', express.raw({ type: 'application/json' }), (req, res)
     const data = JSON.parse(rawBody);
     const { referenceId, event, paymentStatus } = data;
 
-    console.log(`Webhook received: ${event} for order ${referenceId}`);
+    console.log(`Webhook processed: ${event} for order ${referenceId}`);
 
     // Update order status
     if (orders.has(referenceId)) {
@@ -288,7 +301,7 @@ app.post('/webhooks/wayl', express.raw({ type: 'application/json' }), (req, res)
 });
 
 // Request refund
-app.post('/api/refunds', async (req, res) => {
+app.post('/api/refunds', express.json(), async (req, res) => {
   try {
     const { referenceId, amount, reason } = req.body;
 
@@ -356,7 +369,8 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📦 Store URL: http://localhost:${PORT}`);
-  console.log(`🔐 API Token: ${process.env.WAYL_API_TOKEN ? '✓ Configured' : '✗ Missing'}`);
+  console.log(`\n🚀 MBOOSTT Luxury Store running on port ${PORT}`);
+  console.log(`💎 Store URL: http://localhost:${PORT}`);
+  console.log(`💳 Wayl API: ${process.env.WAYL_API_URL}`);
+  console.log(`🔐 API Token: ${process.env.WAYL_API_TOKEN ? '✓ Configured' : '✗ Missing'}\n`);
 });
