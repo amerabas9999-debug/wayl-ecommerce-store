@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: wayl-ecommerce-store
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: WAYL_API_URL
+        value: https://api.thewayl.com
+      - key: WAYL_ENV
+        value: live
+      - key: WAYL_API_TOKEN
+        sync: false
+      - key: WEBHOOK_SECRET
+        sync: false
+      - key: WEBHOOK_URL
+        value: https://wayl-ecommerce-store.onrender.com/webhooks/wayl
+      - key: REDIRECT_URL
+        value: https://wayl-ecommerce-store.onrender.com/success
